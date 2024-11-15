@@ -32,32 +32,31 @@ uint32_t LCGTausworth(uint4& t) {
     return t.x ^ t.y ^ t.z ^ t.w;
 }
 
-void InitHost(uint32_t* braces, const uint32_t size, const uint32_t maxDepth, const uint32_t seed) {
+void InitHost(uint32_t* hostData, const uint32_t size, const uint32_t maxDepth, const uint32_t seed) {
     uint4 t =
         make_uint4(seed * 1000000007, seed * 2000000011, seed * 3000000019, seed * 4000000007);
     uint32_t depth = 0;
-    const uint32_t half = 1u << 31;
     for (uint32_t i = 0; i < size - depth; ++i) {
         const uint32_t rand = LCGTausworth(t);
         if (!depth) {
-            braces[i] = 1;
+            hostData[i] = 1;
             depth++;
         } else if (depth >= maxDepth - 1) {
-            braces[i] = 0;
+            hostData[i] = 0;
             depth--;
         } else {
-            if (rand <= half) {
-                braces[i] = 0;
+            if (rand & 1) {
+                hostData[i] = 0;
                 depth--;
             } else {
-                braces[i] = 1;
+                hostData[i] = 1;
                 depth++;
             }
         }
     }
 
     for (uint32_t i = size - depth; i < size; ++i) {
-        braces[i] = 0;
+        hostData[i] = 0;
     }
 }
 
@@ -76,11 +75,11 @@ bool GetHostSolution(uint32_t* hostData, uint32_t size) {
     return t.empty();
 }
 
-__global__ void ValidateKernel(uint32_t* braces, uint32_t* expected, uint32_t* err,
+__global__ void ValidateKernel(uint32_t* data, uint32_t* expected, uint32_t* err,
                                const uint32_t size) {
     for (uint32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < size;
          i += blockDim.x * gridDim.x) {
-        if (braces[i] != expected[i]) {
+        if (data[i] != expected[i]) {
             // printf("Error at %u expected: %u, got: %u\n", i, expected[i], braces[i]);
             atomicAdd(&err[0], 1);
             atomicAdd(&err[1], i - expected[i]);
@@ -524,7 +523,7 @@ int main() {
     constexpr uint32_t blockSize = warps * LANE_COUNT;
     constexpr uint32_t partSize = blockSize * perThread;
     constexpr uint32_t threadBlocks = (size + partSize - 1) / partSize;
-    constexpr uint32_t batchCount = 100;
+    constexpr uint32_t batchCount = 500;
 
     uint32_t* data;
     uint32_t* bump;
